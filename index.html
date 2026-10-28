@@ -120,6 +120,7 @@
       <label for="barcode">Barkod numarası</label>
       <input id="barcode" type="text" inputmode="numeric" placeholder="Okunmazsa elle yazın" autocomplete="off">
     </div>
+    <button type="button" class="btn ghost" id="noBarcode">Barkodu yok, ürün adına geç</button>
   </section>
 
   <!-- Adım 2: Ürün adı -->
@@ -148,8 +149,8 @@
     <dl class="summary"><dt>Barkod</dt><dd id="sumBarcode">—</dd><dt>Ürün</dt><dd id="sumName">—</dd></dl>
     <div>
       <label for="expiry">SKT</label>
-      <input id="expiry" type="text" placeholder="Örn. 31.12.2027 veya 12/2027" autocomplete="off">
-      <p class="hint" id="expiryHint" style="margin-top:6px">Pakette yazdığı gibi girin. Yalnız ay/yıl varsa ayın son günü kaydedilir.</p>
+      <input id="expiry" type="text" inputmode="numeric" placeholder="GG.AA.YYYY  (örn. 12.12.2026)" autocomplete="off" maxlength="10">
+      <p class="hint" id="expiryHint" style="margin-top:6px">Gün, ay, yıl olarak yazın; noktalar kendiliğinden eklenir.</p>
     </div>
     <div class="quick">
       <button type="button" id="noExpiry">SKT yok</button>
@@ -405,11 +406,23 @@
     const iso = parseExpiry(raw);
     const h = $('expiryHint');
     h.style.color = '';
-    if (!raw) h.textContent = 'Pakette yazdığı gibi girin. Yalnız ay/yıl varsa ayın son günü kaydedilir.';
+    if (!raw) h.textContent = 'Gün, ay, yıl olarak yazın; noktalar kendiliğinden eklenir.';
     else if (iso) h.textContent = '✓ ' + isoToTr(iso) + ' olarak kaydedilecek';
     else { h.textContent = 'Tarih olarak anlaşılamadı, yazdığınız gibi kaydedilecek.'; h.style.color = 'var(--warn)'; }
   }
-  $('expiry').addEventListener('input', updateExpiryHint);
+  // Yalnız rakam yazılıyorsa GG.AA.YYYY biçimine noktalar eklenir; silerken biçimlemeye karışılmaz.
+  $('expiry').addEventListener('input', (ev) => {
+    const el = $('expiry');
+    let v = el.value.replace(/,/g, '.');
+    if (!/^delete/.test(ev.inputType || '') && /^[\d.]*$/.test(v)) {
+      const digits = v.replace(/\D/g, '').slice(0, 8);
+      v = digits.slice(0, 2);
+      if (digits.length > 2) v += '.' + digits.slice(2, 4);
+      if (digits.length > 4) v += '.' + digits.slice(4);
+    }
+    el.value = v;
+    updateExpiryHint();
+  });
   $('noExpiry').addEventListener('click', () => { $('expiry').value = ''; updateExpiryHint(); toast('SKT boş kaydedilecek'); });
   $('qtyMinus').addEventListener('click', () => { $('qty').value = Math.max(1, (parseInt($('qty').value, 10) || 1) - 1); });
   $('qtyPlus').addEventListener('click', () => { $('qty').value = (parseInt($('qty').value, 10) || 0) + 1; });
@@ -423,7 +436,7 @@
     });
     $('backBtn').hidden = n === 1;
     $('nextBtn').textContent = n === 3 ? 'Kaydet ve sıradaki' : 'Devam';
-    if (n === 3) { $('sumBarcode').textContent = $('barcode').value.trim() || '—'; $('sumName').textContent = $('name').value.trim() || '—'; }
+    if (n === 3) { $('sumBarcode').textContent = $('barcode').value.trim() || 'Barkodsuz ürün';$('sumName').textContent = $('name').value.trim() || '—'; }
     updateButtons();
     window.scrollTo(0, 0);
   }
@@ -438,7 +451,7 @@
     const code = $('barcode').value.trim();
     $('knownName').hidden = true;
     show(2);
-    if ($('name').value.trim()) return;
+    if (!code || $('name').value.trim()) return;
     try {
       const known = await server('lookupName', code);
       if (known && step === 2 && !$('name').value.trim()) {
@@ -508,6 +521,7 @@
     else save();
   });
   $('backBtn').addEventListener('click', () => show(step - 1));
+  $('noBarcode').addEventListener('click', () => { $('barcode').value = ''; goStep2(); });
   window.addEventListener('online', flush);
 
   show(1); renderMeta(); flush();
