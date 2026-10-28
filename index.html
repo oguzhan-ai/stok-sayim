@@ -148,11 +148,10 @@
     <dl class="summary"><dt>Barkod</dt><dd id="sumBarcode">—</dd><dt>Ürün</dt><dd id="sumName">—</dd></dl>
     <div>
       <label for="expiry">SKT</label>
-      <input id="expiry" type="date">
+      <input id="expiry" type="text" placeholder="Örn. 31.12.2027 veya 12/2027" autocomplete="off">
+      <p class="hint" id="expiryHint" style="margin-top:6px">Pakette yazdığı gibi girin. Yalnız ay/yıl varsa ayın son günü kaydedilir.</p>
     </div>
-    <div class="quick" id="noDay">
-      <span class="hint" style="width:100%;font-size:13px;color:var(--muted)">Pakette yalnız ay/yıl varsa: ayı seçip ayın son gününü kullanın</span>
-      <button type="button" id="endOfMonth">Seçili ayın son günü</button>
+    <div class="quick">
       <button type="button" id="noExpiry">SKT yok</button>
     </div>
     <div class="row">
@@ -323,7 +322,7 @@
       serial = '';
       if (gs1) {
         $('barcode').value = normalizeCode(gs1.gtin);
-        if (gs1.expiry) $('expiry').value = gs1.expiry;
+        if (gs1.expiry) { $('expiry').value = isoToTr(gs1.expiry); updateExpiryHint(); }
         if (gs1.lot) $('lot').value = gs1.lot;
         serial = gs1.serial;
         setStatus(st, 'ok', 'Karekod okundu: <span class="code">' + esc($('barcode').value) + '</span>' + (gs1.expiry ? '<br>SKT ve parti otomatik dolduruldu.' : ''));
@@ -383,14 +382,35 @@
   $('name').addEventListener('input', updateButtons);
 
   // --- Adım 3 yardımcıları ---
-  $('endOfMonth').addEventListener('click', () => {
-    const v = $('expiry').value;
-    const now = new Date();
-    const y = v ? Number(v.slice(0, 4)) : now.getFullYear();
-    const m = v ? Number(v.slice(5, 7)) : now.getMonth() + 1;
-    $('expiry').value = y + '-' + String(m).padStart(2, '0') + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0');
-  });
-  $('noExpiry').addEventListener('click', () => { $('expiry').value = ''; toast('SKT boş kaydedilecek'); });
+  // Serbest yazılan SKT'yi YYYY-AA-GG'ye çevirir: "31.12.2027", "31/12/27", "12/2027" (→ ayın son günü),
+  // "2027-12-31", "31122027". Anlaşılamazsa null; o durumda metin yazıldığı gibi kaydedilir.
+  function parseExpiry(text) {
+    const s = String(text).trim();
+    let d, mo, y, m;
+    if ((m = /^(\d{1,2})\s*[./\- ]\s*(\d{1,2})\s*[./\- ]\s*(\d{2}|\d{4})$/.exec(s))) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+    else if ((m = /^(\d{1,2})\s*[./\- ]\s*(\d{2}|\d{4})$/.exec(s))) { mo = +m[1]; y = +m[2]; }
+    else if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = /^(\d{2})(\d{2})(\d{4})$/.exec(s))) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+    else return null;
+    if (y < 100) y += 2000;
+    if (mo < 1 || mo > 12 || y < 2000 || y > 2100) return null;
+    const last = new Date(y, mo, 0).getDate();
+    if (d === undefined) d = last;
+    if (d < 1 || d > last) return null;
+    return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  }
+  function isoToTr(iso) { return iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.' + iso.slice(0, 4); }
+  function updateExpiryHint() {
+    const raw = $('expiry').value.trim();
+    const iso = parseExpiry(raw);
+    const h = $('expiryHint');
+    h.style.color = '';
+    if (!raw) h.textContent = 'Pakette yazdığı gibi girin. Yalnız ay/yıl varsa ayın son günü kaydedilir.';
+    else if (iso) h.textContent = '✓ ' + isoToTr(iso) + ' olarak kaydedilecek';
+    else { h.textContent = 'Tarih olarak anlaşılamadı, yazdığınız gibi kaydedilecek.'; h.style.color = 'var(--warn)'; }
+  }
+  $('expiry').addEventListener('input', updateExpiryHint);
+  $('noExpiry').addEventListener('click', () => { $('expiry').value = ''; updateExpiryHint(); toast('SKT boş kaydedilecek'); });
   $('qtyMinus').addEventListener('click', () => { $('qty').value = Math.max(1, (parseInt($('qty').value, 10) || 1) - 1); });
   $('qtyPlus').addEventListener('click', () => { $('qty').value = (parseInt($('qty').value, 10) || 0) + 1; });
 
@@ -431,6 +451,7 @@
 
   function resetForm() {
     ['barcode', 'name', 'expiry', 'lot'].forEach((id) => { $(id).value = ''; });
+    updateExpiryHint();
     $('qty').value = 1; serial = '';
     ['barcodePreview', 'namePreview'].forEach((id) => { const el = $(id); if (el.src) URL.revokeObjectURL(el.src); el.removeAttribute('src'); el.hidden = true; });
     ['barcodeStatus', 'ocrStatus', 'knownName'].forEach((id) => { $(id).hidden = true; });
@@ -442,7 +463,8 @@
   function save() {
     const item = {
       id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10),
-      barcode: $('barcode').value.trim(), name: $('name').value.trim(), expiry: $('expiry').value,
+      barcode: $('barcode').value.trim(), name: $('name').value.trim(),
+      expiry: parseExpiry($('expiry').value) || $('expiry').value.trim(),
       qty: parseInt($('qty').value, 10) || 1, lot: $('lot').value.trim(), serial,
       staff: $('staff').value.trim()
     };
