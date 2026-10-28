@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stok Sayımı</title>
+<style>
+  /* Tek kolon, başparmakla kullanılan mobil akış: üstte adım çubuğu, altta sabit ana buton */
+  :root {
+    --bg: #f3f6f4; --card: #ffffff; --fg: #17221d; --muted: #5d6d65; --line: #d6e0da;
+    --accent: #1f7a55; --accent-ink: #ffffff; --accent-soft: #e2f1e9;
+    --warn: #b45309; --err: #b42318; --ok: #1f7a55;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1613; --card: #18221d; --fg: #e8efeb; --muted: #9aaba2; --line: #2b3a33;
+      --accent: #3fb382; --accent-ink: #06130d; --accent-soft: #1d3329;
+      --warn: #f2a33a; --err: #ff7b6e; --ok: #3fb382;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(110px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .meta { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .meta b { color: var(--fg); }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .steps div { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding-top: 8px; border-top: 4px solid var(--line); }
+  .steps div.on { color: var(--accent); border-color: var(--accent); }
+  .steps div.done { color: var(--fg); border-color: var(--accent); opacity: .55; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  h2 { font-size: 22px; margin: 0; text-wrap: balance; }
+  p.hint { margin: 0; color: var(--muted); font-size: 14px; }
+  label { font-size: 13px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 6px; }
+  input[type=text], input[type=date], input[type=number] {
+    width: 100%; font: inherit; font-size: 18px; padding: 13px 14px; border-radius: 10px;
+    border: 1.5px solid var(--line); background: var(--bg); color: var(--fg);
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .shot {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    min-height: 168px; border: 2px dashed var(--accent); border-radius: var(--radius);
+    background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 18px; cursor: pointer; text-align: center; padding: 16px;
+  }
+  .shot svg { width: 44px; height: 44px; }
+  .shot small { font-weight: 500; font-size: 13px; color: var(--muted); }
+  .shot input { display: none; }
+  .preview { width: 100%; max-height: 220px; object-fit: contain; border-radius: 10px; background: var(--bg); }
+  .status { font-size: 15px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); } .status.warn { color: var(--warn); }
+  .code { font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: 0.02em; word-break: break-all; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips button { font: inherit; font-size: 15px; padding: 8px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; text-align: left; }
+  .chips button.sel { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; min-width: 0; }
+  .qty { display: flex; align-items: stretch; gap: 8px; }
+  .qty button { width: 56px; font-size: 24px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--fg); }
+  .qty input { text-align: center; font-variant-numeric: tabular-nums; }
+  .quick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .quick button { font: inherit; font-size: 14px; padding: 7px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  .summary { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 15px; }
+  .summary dt { color: var(--muted); } .summary dd { margin: 0; font-weight: 600; word-break: break-word; }
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+    padding: 12px max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  .bar .in { max-width: 520px; margin: 0 auto; display: flex; gap: 10px; }
+  .btn { font: inherit; font-size: 18px; font-weight: 700; padding: 16px; border-radius: 12px; border: 0; cursor: pointer; }
+  .btn.primary { flex: 1; background: var(--accent); color: var(--accent-ink); }
+  .btn.primary:disabled { opacity: .4; }
+  .btn.ghost { background: var(--bg); color: var(--fg); border: 1.5px solid var(--line); }
+  .linkbtn { background: none; border: 0; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; padding: 0; cursor: pointer; text-decoration: underline; }
+  .toast {
+    position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top)); transform: translateX(-50%);
+    background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-weight: 600; font-size: 15px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 20; max-width: calc(100% - 32px);
+  }
+  .spin { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s .8s linear infinite; vertical-align: -3px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  .staff { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+  .staff input { font-size: 15px; padding: 8px 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Stok Sayımı</h1>
+    <div class="meta">Bu telefondan: <b id="countLocal">0</b><br><span id="queueInfo">Tümü kaydedildi</span></div>
+  </header>
+
+  <div class="staff"><span>Personel</span><input id="staff" type="text" placeholder="Adınız (isteğe bağlı)" autocomplete="name"></div>
+
+  <div class="steps"><div id="st1">1 · Barkod</div><div id="st2">2 · Ürün adı</div><div id="st3">3 · SKT</div></div>
+
+  <!-- Adım 1: Barkod -->
+  <section class="card" id="step1">
+    <h2>Barkodu okutun</h2>
+    <p class="hint">Barkoda veya karekoda yakından, net ve düz çekin. İlaç karekodunda SKT ve parti no otomatik dolar.</p>
+    <label class="shot" for="barcodePhoto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M10 8v8M14 8v8M17 8v8"/></svg>
+      Kamerayı aç ve barkodu çek
+      <small>Telefonun kamerası açılır</small>
+      <input id="barcodePhoto" type="file" accept="image/*" capture="environment">
+    </label>
+    <img id="barcodePreview" class="preview" alt="" hidden>
+    <div id="barcodeStatus" class="status" hidden></div>
+    <div>
+      <label for="barcode">Barkod numarası</label>
+      <input id="barcode" type="text" inputmode="numeric" placeholder="Okunmazsa elle yazın" autocomplete="off">
+    </div>
+  </section>
+
+  <!-- Adım 2: Ürün adı -->
+  <section class="card" id="step2" hidden>
+    <h2>Ürün adını alın</h2>
+    <p class="hint">Paketin ön yüzünü çekin, okunan yazılardan ürün adına dokunun. Gerekirse düzeltin.</p>
+    <div id="knownName" class="status ok" hidden></div>
+    <label class="shot" for="namePhoto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      Paketin fotoğrafını çek
+      <small>Yazılar otomatik okunur</small>
+      <input id="namePhoto" type="file" accept="image/*" capture="environment">
+    </label>
+    <img id="namePreview" class="preview" alt="" hidden>
+    <div id="ocrStatus" class="status" hidden></div>
+    <div id="chips" class="chips"></div>
+    <div>
+      <label for="name">Ürün adı</label>
+      <input id="name" type="text" placeholder="Örn. Nobivac DHPPi" autocomplete="off">
+    </div>
+  </section>
+
+  <!-- Adım 3: SKT ve adet -->
+  <section class="card" id="step3" hidden>
+    <h2>Son kullanma tarihi</h2>
+    <dl class="summary"><dt>Barkod</dt><dd id="sumBarcode">—</dd><dt>Ürün</dt><dd id="sumName">—</dd></dl>
+    <div>
+      <label for="expiry">SKT</label>
+      <input id="expiry" type="date">
+    </div>
+    <div class="quick" id="noDay">
+      <span class="hint" style="width:100%;font-size:13px;color:var(--muted)">Pakette yalnız ay/yıl varsa: ayı seçip ayın son gününü kullanın</span>
+      <button type="button" id="endOfMonth">Seçili ayın son günü</button>
+      <button type="button" id="noExpiry">SKT yok</button>
+    </div>
+    <div class="row">
+      <div>
+        <label for="lot">Parti / Lot</label>
+        <input id="lot" type="text" autocomplete="off" placeholder="İsteğe bağlı">
+      </div>
+    </div>
+    <div>
+      <label for="qty">Adet</label>
+      <div class="qty">
+        <button type="button" id="qtyMinus" aria-label="Azalt">−</button>
+        <input id="qty" type="number" inputmode="numeric" min="1" value="1">
+        <button type="button" id="qtyPlus" aria-label="Arttır">+</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="bar"><div class="in">
+  <button class="btn ghost" id="backBtn" hidden>Geri</button>
+  <button class="btn primary" id="nextBtn">Devam</button>
+</div></div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const GS = '\x1d';
+  let step = 1;
+  let serial = '';
+
+  // --- Kalıcı yerel durum (personel adı, sayaç, gönderilmeyi bekleyen kayıtlar) ---
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  let queue = store.get('stok_queue', []);
+  let countLocal = store.get('stok_count', 0);
+  $('staff').value = store.get('stok_staff', '');
+  $('staff').addEventListener('change', () => store.set('stok_staff', $('staff').value.trim()));
+
+  // Apps Script içinde açılırsa google.script.run, GitHub Pages'te ise web uygulamasının doPost'u kullanılır.
+  // fetch çerez göndermez; telefondaki Google hesapları isteği etkilemez.
+  const API_URL = 'https://script.google.com/macros/s/AKfycbwAPsltpnJqNcp-8tsCqpJfiE25ZFn2_xmgkjAUTX0crZ5FmrbvM7hRLpS4D34EyLp7Vw/exec';
+  function server(fn, ...args) {
+    if (window.google && google.script && google.script.run) {
+      return new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args));
+    }
+    return fetch(API_URL, { method: 'POST', body: JSON.stringify({ fn, args }) })
+      .then((r) => { if (!r.ok) throw new Error('Sunucu hatası (' + r.status + ')'); return r.json(); })
+      .then((res) => { if (!res.ok) throw new Error(res.error || 'İşlem başarısız'); return res.result; });
+  }
+
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+  function setStatus(el, cls, html) { el.className = 'status ' + cls; el.innerHTML = html; el.hidden = !html; }
+  function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  // --- Görseli küçültüp canvas'a çizme ---
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => resolve({ img, url });
+      img.onerror = () => reject(new Error('Fotoğraf açılamadı'));
+      img.src = url;
+    });
+  }
+  function toCanvas(img, maxDim) {
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  // --- Barkod çözme: önce tarayıcının yerleşik okuyucusu (Android), sonra ZXing ---
+  async function nativeDecode(canvas) {
+    if (!('BarcodeDetector' in window)) return null;
+    try {
+      const det = new BarcodeDetector();
+      const res = await det.detect(canvas);
+      return res.length ? res[0].rawValue : null;
+    } catch (e) { return null; }
+  }
+  function zxingDecode(canvas) {
+    if (!window.ZXing) return null;
+    const ctx = canvas.getContext('2d');
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const lum = new Uint8ClampedArray(canvas.width * canvas.height);
+    for (let i = 0, j = 0; j < lum.length; i += 4, j++) lum[j] = (data[i] * 306 + data[i + 1] * 601 + data[i + 2] * 117) >> 10;
+    const F = ZXing.BarcodeFormat;
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.DATA_MATRIX, F.QR_CODE]);
+    const reader = new ZXing.MultiFormatReader();
+    reader.setHints(hints);
+    try {
+      const src = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
+      return reader.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(src))).getText();
+    } catch (e) { return null; }
+  }
+  async function decodeBarcode(img) {
+    for (const size of [1600, 1000, 640, 2400]) {
+      const c = toCanvas(img, size);
+      const v = (await nativeDecode(c)) || zxingDecode(c);
+      if (v) return v;
+    }
+    return null;
+  }
+
+  // GS1 karekodu (İTS): (01) GTIN, (17) SKT YYAAGG, (10) parti, (21) seri.
+  function parseGs1(raw) {
+    let s = String(raw).replace(/^\](d2|C1|Q3|e0)/, '');
+    const out = {};
+    if (s[0] === '(') {
+      const re = /\((\d{2,4})\)([^(]*)/g; let m;
+      while ((m = re.exec(s))) out[m[1]] = m[2].trim();
+    } else {
+      s = s.replace(/^\x1d/, '');
+      if (!/^01\d{14}/.test(s)) return null;
+      let i = 0;
+      while (i < s.length) {
+        if (s[i] === GS) { i++; continue; }
+        const ai = s.substr(i, 2);
+        if (ai === '01' || ai === '02') { out[ai] = s.substr(i + 2, 14); i += 16; }
+        else if (['11', '13', '15', '17'].includes(ai)) { out[ai] = s.substr(i + 2, 6); i += 8; }
+        else if (['10', '21', '22'].includes(ai)) { let j = s.indexOf(GS, i + 2); if (j < 0) j = s.length; out[ai] = s.slice(i + 2, j); i = j; }
+        else break;
+      }
+    }
+    if (!out['01']) return null;
+    let expiry = '';
+    const e = out['17'];
+    if (e && /^\d{6}$/.test(e)) {
+      const y = 2000 + Number(e.slice(0, 2)), mo = Number(e.slice(2, 4));
+      let d = Number(e.slice(4, 6));
+      if (d === 0) d = new Date(y, mo, 0).getDate(); // GG=00 → ayın son günü
+      expiry = y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+    return { gtin: out['01'], expiry, lot: out['10'] || '', serial: out['21'] || '' };
+  }
+  // GTIN-14'ün başındaki 0 atılır ki kutudaki EAN-13 ile karekod aynı ürün olarak eşleşsin.
+  function normalizeCode(code) {
+    code = String(code).trim();
+    return /^0\d{13}$/.test(code) ? code.slice(1) : code;
+  }
+
+  let barcodeToken = 0;
+  $('barcodePhoto').addEventListener('change', async (ev) => {
+    const file = ev.target.files[0]; ev.target.value = '';
+    if (!file) return;
+    const token = ++barcodeToken;
+    const st = $('barcodeStatus');
+    setStatus(st, '', '<span class="spin"></span>Barkod okunuyor…');
+    try {
+      const { img, url } = await loadImage(file);
+      $('barcodePreview').src = url; $('barcodePreview').hidden = false;
+      const raw = await decodeBarcode(img);
+      if (token !== barcodeToken) return;
+      if (!raw) { setStatus(st, 'err', 'Barkod okunamadı. Daha yakından ve net tekrar çekin ya da numarayı elle yazın.'); return; }
+      const gs1 = parseGs1(raw);
+      serial = '';
+      if (gs1) {
+        $('barcode').value = normalizeCode(gs1.gtin);
+        if (gs1.expiry) $('expiry').value = gs1.expiry;
+        if (gs1.lot) $('lot').value = gs1.lot;
+        serial = gs1.serial;
+        setStatus(st, 'ok', 'Karekod okundu: <span class="code">' + esc($('barcode').value) + '</span>' + (gs1.expiry ? '<br>SKT ve parti otomatik dolduruldu.' : ''));
+      } else {
+        $('barcode').value = normalizeCode(raw.replace(/[\x00-\x1f]/g, ''));
+        setStatus(st, 'ok', 'Okundu: <span class="code">' + esc($('barcode').value) + '</span>');
+      }
+      updateButtons();
+    } catch (e) {
+      setStatus(st, 'err', esc(e.message || 'Fotoğraf işlenemedi.'));
+    }
+  });
+  $('barcode').addEventListener('input', updateButtons);
+
+  // --- Adım 2: OCR ---
+  function renderChips(lines) {
+    const box = $('chips'); box.innerHTML = '';
+    lines.forEach((line) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = line;
+      b.addEventListener('click', () => {
+        const cur = $('name').value.trim();
+        // İlk dokunuş adı yazar, sonrakiler ekler (ör. "Marka" + "50 mg").
+        if (b.classList.contains('sel')) {
+          b.classList.remove('sel');
+          $('name').value = cur.split(line).join('').replace(/\s+/g, ' ').trim();
+        } else {
+          b.classList.add('sel');
+          $('name').value = cur ? cur + ' ' + line : line;
+        }
+        updateButtons();
+      });
+      box.appendChild(b);
+    });
+  }
+  let ocrToken = 0;
+  $('namePhoto').addEventListener('change', async (ev) => {
+    const file = ev.target.files[0]; ev.target.value = '';
+    if (!file) return;
+    const token = ++ocrToken;
+    const st = $('ocrStatus');
+    setStatus(st, '', '<span class="spin"></span>Paket üzerindeki yazılar okunuyor…');
+    $('chips').innerHTML = '';
+    try {
+      const { img, url } = await loadImage(file);
+      $('namePreview').src = url; $('namePreview').hidden = false;
+      const b64 = toCanvas(img, 1600).toDataURL('image/jpeg', 0.85).split(',')[1];
+      const lines = await server('ocrImage', b64, 'image/jpeg');
+      if (token !== ocrToken) return;
+      if (!lines || !lines.length) { setStatus(st, 'warn', 'Yazı bulunamadı. Ürün adının olduğu yüzü tekrar çekin veya elle yazın.'); return; }
+      setStatus(st, 'ok', 'Ürün adına dokunun (birden fazla seçebilirsiniz):');
+      renderChips(lines);
+    } catch (e) {
+      setStatus(st, 'err', 'Yazılar okunamadı: ' + esc(e.message || e) + '. Ürün adını elle yazabilirsiniz.');
+    }
+  });
+  $('name').addEventListener('input', updateButtons);
+
+  // --- Adım 3 yardımcıları ---
+  $('endOfMonth').addEventListener('click', () => {
+    const v = $('expiry').value;
+    const now = new Date();
+    const y = v ? Number(v.slice(0, 4)) : now.getFullYear();
+    const m = v ? Number(v.slice(5, 7)) : now.getMonth() + 1;
+    $('expiry').value = y + '-' + String(m).padStart(2, '0') + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0');
+  });
+  $('noExpiry').addEventListener('click', () => { $('expiry').value = ''; toast('SKT boş kaydedilecek'); });
+  $('qtyMinus').addEventListener('click', () => { $('qty').value = Math.max(1, (parseInt($('qty').value, 10) || 1) - 1); });
+  $('qtyPlus').addEventListener('click', () => { $('qty').value = (parseInt($('qty').value, 10) || 0) + 1; });
+
+  // --- Adım yönetimi ---
+  function show(n) {
+    step = n;
+    [1, 2, 3].forEach((i) => {
+      $('step' + i).hidden = i !== n;
+      $('st' + i).className = i === n ? 'on' : i < n ? 'done' : '';
+    });
+    $('backBtn').hidden = n === 1;
+    $('nextBtn').textContent = n === 3 ? 'Kaydet ve sıradaki' : 'Devam';
+    if (n === 3) { $('sumBarcode').textContent = $('barcode').value.trim() || '—'; $('sumName').textContent = $('name').value.trim() || '—'; }
+    updateButtons();
+    window.scrollTo(0, 0);
+  }
+  function updateButtons() {
+    const b = $('nextBtn');
+    if (step === 1) b.disabled = !$('barcode').value.trim();
+    else if (step === 2) b.disabled = !$('name').value.trim();
+    else b.disabled = false;
+  }
+
+  async function goStep2() {
+    const code = $('barcode').value.trim();
+    $('knownName').hidden = true;
+    show(2);
+    if ($('name').value.trim()) return;
+    try {
+      const known = await server('lookupName', code);
+      if (known && step === 2 && !$('name').value.trim()) {
+        $('name').value = known;
+        setStatus($('knownName'), 'ok', 'Bu barkod daha önce sayılmış, ad otomatik dolduruldu. Doğruysa “Devam”a basın.');
+        updateButtons();
+      }
+    } catch (e) { /* ad bulunamazsa sessizce elle girişe devam */ }
+  }
+
+  function resetForm() {
+    ['barcode', 'name', 'expiry', 'lot'].forEach((id) => { $(id).value = ''; });
+    $('qty').value = 1; serial = '';
+    ['barcodePreview', 'namePreview'].forEach((id) => { const el = $(id); if (el.src) URL.revokeObjectURL(el.src); el.removeAttribute('src'); el.hidden = true; });
+    ['barcodeStatus', 'ocrStatus', 'knownName'].forEach((id) => { $(id).hidden = true; });
+    $('chips').innerHTML = '';
+    barcodeToken++; ocrToken++;
+  }
+
+  // Kayıt kuyruğa alınır ve ekran hemen sıradaki ürüne döner; gönderim arka planda yapılır.
+  function save() {
+    const item = {
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10),
+      barcode: $('barcode').value.trim(), name: $('name').value.trim(), expiry: $('expiry').value,
+      qty: parseInt($('qty').value, 10) || 1, lot: $('lot').value.trim(), serial,
+      staff: $('staff').value.trim()
+    };
+    store.set('stok_staff', item.staff);
+    queue.push(item); store.set('stok_queue', queue);
+    countLocal++; store.set('stok_count', countLocal);
+    toast('“' + item.name + '” sıraya alındı');
+    resetForm(); show(1); renderMeta(); flush();
+  }
+
+  let flushing = false;
+  async function flush() {
+    if (flushing || !queue.length) return;
+    flushing = true; renderMeta();
+    while (queue.length) {
+      try {
+        const res = await server('saveItem', queue[0]);
+        queue.shift(); store.set('stok_queue', queue);
+        if (res && res.total) $('queueInfo').textContent = 'Tabloda ' + res.total + ' satır';
+      } catch (e) {
+        flushing = false; renderMeta(true);
+        setTimeout(flush, 5000);
+        return;
+      }
+    }
+    flushing = false; renderMeta();
+  }
+  function renderMeta(failed) {
+    $('countLocal').textContent = countLocal;
+    const q = $('queueInfo');
+    if (queue.length) {
+      q.innerHTML = failed
+        ? '<span style="color:var(--err)">' + queue.length + ' kayıt bekliyor, tekrar deneniyor</span>'
+        : '<span class="spin"></span>' + queue.length + ' kayıt gönderiliyor';
+    } else if (!/Tabloda/.test(q.textContent)) q.textContent = 'Tümü kaydedildi';
+  }
+
+  $('nextBtn').addEventListener('click', () => {
+    if (step === 1) goStep2();
+    else if (step === 2) show(3);
+    else save();
+  });
+  $('backBtn').addEventListener('click', () => show(step - 1));
+  window.addEventListener('online', flush);
+
+  show(1); renderMeta(); flush();
+})();
+</script>
+</body>
+</html>
